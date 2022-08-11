@@ -1,3 +1,5 @@
+const width = window.innerWidth / 2;
+const height = window.innerHeight;
 class createMatter {
   Engine = Matter.Engine;
   Render = Matter.Render;
@@ -6,7 +8,13 @@ class createMatter {
   Composite = Matter.Composite;
   bodys = [];
   constructor() {
-    const { Engine, Render, Runner, Bodies, Composite } = this;
+    const {
+      Engine,
+      Render,
+      Runner,
+      Bodies,
+      Composite
+    } = this;
     // create an engine
     this.engine = Engine.create();
 
@@ -15,18 +23,16 @@ class createMatter {
       element: document.body,
       engine: this.engine,
       options: {
-        width: window.innerWidth / 2,
-        height: window.innerHeight,
+        width,
+        height,
       },
     });
-
-    // create two boxes and a ground
-    let boxA = Bodies.rectangle(400, 200, 80, 80);
-    let boxB = Bodies.rectangle(450, 50, 80, 80);
-    let ground = Bodies.rectangle(400, 910, 810, 60, { isStatic: true });
+    let ground = Bodies.rectangle(400, 910, 810, 60, {
+      isStatic: true
+    });
 
     // add all of the bodies to the world
-    this.composite = Composite.add(this.engine.world, [boxA, boxB, ground]);
+    this.composite = Composite.add(this.engine.world, ground);
 
     // run the renderer
     Render.run(this.render);
@@ -36,6 +42,37 @@ class createMatter {
 
     // run the engine
     Runner.run(this.runner, this.engine);
+  }
+
+  createIrregular(x, y, points, options = {}) {
+    if (!Array.isArray(points) || points.length < 3) return;
+    x += this.render.options.width / 2;
+    y += this.render.options.height / 2;
+    const vertexSets = [
+      []
+    ];
+    for (let i = 0; i < points.length; i += 3) {
+      vertexSets[0].push({
+        x: -points[i],
+        y: points[i + 1],
+      });
+    }
+
+    // vertexSets[0].push(vertexSets[0][0]);
+    // console.log("vertexSets: ", vertexSets);
+    const irregular = this.Bodies.fromVertices(x, y, vertexSets, {
+      angle: Math.PI,
+      ...options
+    });
+    this.bodys.push(irregular);
+    this.Composite.add(this.engine.world, irregular);
+  }
+
+  getCenterForThree(body) {
+    return {
+      x: body.position.x - this.render.options.width / 2,
+      y: body.position.y - this.render.options.height / 2
+    }
   }
 }
 
@@ -48,69 +85,103 @@ class createThree {
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
     });
-    this.renderer.setSize(window.innerWidth / 2, window.innerHeight);
+    this.renderer.setSize(width, height);
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.setClearColor("#14151F", 1);
 
     document.body.appendChild(this.renderer.domElement);
 
-    this.camera = new THREE.PerspectiveCamera(
-      50,
-      window.innerWidth / window.innerHeight,
-      1,
-      3000
-    );
+    this.camera = new THREE.OrthographicCamera(width / -2, width / 2, height / 2, height / -2, 1, 1000);
     this.camera.position.x = 0;
-    this.camera.position.y = 200;
+    this.camera.position.y = 0;
     this.camera.position.z = 800;
 
-    new THREE.OrbitControls(this.camera);
+    // new THREE.OrbitControls(this.camera);
 
     this.scene = new THREE.Scene();
-    let renderFlash = () => {
-      requestAnimationFrame(renderFlash); // 避免不必要得刷新
-      // requestAnimationFrame(renderFlash);
-      this.renderer.render(this.scene, this.camera);
-    };
-    renderFlash();
+  }
+  createCircle() {
+    const geometry = new THREE.TorusKnotGeometry(100, 30, 100, 16);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0xffff00
+    });
+    const torusKnot = new THREE.Mesh(geometry, material);
+    this.scene.add(torusKnot);
+    return torusKnot;
   }
 }
 
 class contactThreeMatter {
   three = new createThree();
   matter = new createMatter();
+  testGift = [];
   constructor() {
-    this.createIrregular(
-      30,
-      30,
-      [30, 30, 0, 40, 40, 0, 50, 50, 0, 100, 100, 0],
-      {
+    const circle = this.three.createCircle();
+    circle.geometry.rotateZ(Math.PI / 4)
+    this.matter.createIrregular(
+      circle.position.x,
+      circle.position.y,
+      [...circle.geometry.attributes.position.array], {
+        restitution: 0.8,
         isStatic: true,
       }
     );
-    console.log("this.matter.Composite: ", this.matter.composite);
+    this.makeCircle()
+    this.render()
+    // this.render()
   }
-  createIrregular(x, y, points, options = {}) {
-    if (!Array.isArray(points)) return;
-    if (!points.length) return;
-    const vertexSets = [[]];
-    for (let i = 0; i < points.length; i += 3) {
-      vertexSets[0].push({
-        x: points[i],
-        y: points[i + 1],
-      });
-    }
+  render() {
+    let renderFlash = () => {
+      requestAnimationFrame(renderFlash); // 避免不必要得刷新
+      this.update()
+      this.three.renderer.render(this.three.scene, this.three.camera);
+    };
+    renderFlash()
+  }
+  update() {
+    this.makeCircle();
+    this.testGift = this.testGift.filter(({
+      three,
+      matter
+    }) => {
+      let bool = false;
+      if (!matter) return false;
+      if (matter.position.x >= -300 && matter.position.x <= width + 300 && matter.position.y >= -300 && matter.position.y <= height + 300) {
+        bool = true
+      } else {};
+      if (!bool) {
+        this.three.scene.remove(three)
+        this.matter.Composite.remove(this.matter.engine.world, matter);
+      };
+      return bool;
+    })
+    this.testGift.forEach(({
+      three,
+      matter
+    }) => {
+      const position = this.matter.getCenterForThree(matter);
+      three.position.x = position.x
+      three.position.y = -position.y
+    })
+  }
+  makeCircle() {
+    const geometry = new THREE.CircleGeometry(20, 32);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0xffff00
+    });
+    const circle = new THREE.Mesh(geometry, material);
+    this.three.scene.add(circle);
+    const matterCircle = Matter.Bodies.circle(width / 2, -30, 20, {
+      restitution: 0.8
+    })
+    this.matter.Composite.add(this.matter.engine.world, matterCircle);
+    this.testGift.push({
+      three: circle,
+      matter: matterCircle
+    })
+  }
+  createTestGift() {
 
-    const irregular = this.matter.Bodies.fromVertices(
-      x,
-      y,
-      vertexSets,
-      options
-    );
-    this.matter.bodys.push(irregular);
-    console.log("irregular: ", irregular);
-    console.log("this.matter.engine: ", this.matter.engine);
-    this.matter.Composite.add(this.matter.engine.world, irregular);
   }
 }
 
